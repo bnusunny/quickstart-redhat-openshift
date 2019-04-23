@@ -39,6 +39,9 @@ qs_retry_command 10 cfn-init -v --stack ${AWS_STACKNAME} --resource AnsibleConfi
 echo openshift_master_cluster_hostname=${INTERNAL_MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
 echo openshift_master_cluster_public_hostname=${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
 
+# disable docker image availability check. workaround for the hardcoded 10 seconds time out
+echo 'openshift_disable_check="docker_image_availability"' >> /tmp/openshift_inventory_userdata_vars
+
 if [ "$(echo ${MASTER_ELBDNSNAME} | grep -c '\.elb\.amazonaws\.com')" == "0" ] ; then
     echo openshift_master_default_subdomain=${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
 fi
