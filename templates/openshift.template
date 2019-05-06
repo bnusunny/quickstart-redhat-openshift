@@ -323,12 +323,12 @@ Parameters:
     Type: String
     Default: ''
   AWSServiceBroker:
-    Default: Enabled
+    Default: "Enabled"
     Description: Enable the AWS Service Broker
     Type: String
     AllowedValues:
-      - Enabled
-      - Disabled
+      - "Enabled"
+      - "Disabled"
   HostedZoneID:
     Description: 'OPTIONAL: Route 53 Hosted Zone ID to use. If left blank route 53
       will not be configured and DNS must be setup manually If you specify this you must also specify DomainName'
@@ -370,7 +370,7 @@ Parameters:
     Description: Custom cluster name for kubernetes.io/cluster/ tags, if left blank will use the stackname suffixed with the region
     Type: String
   GlusterFS:
-    Default: Enabled
+    Default: Disabled
     Description: Enable GlusterFS storage cluster
     Type: String
     AllowedValues:
@@ -419,7 +419,9 @@ Parameters:
     Default: Enabled
     Description: Enable the OpenShift Automation Service Broker
     Type: String
-    AllowedValues: [ Enabled, Disabled ]
+    AllowedValues: 
+      - Enabled
+      - Disabled
 Rules:
   SubnetsInVPC:
     Assertions:
@@ -640,7 +642,7 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: arn:aws-cn:logs:*:*:*
+                Resource: !Sub "arn:${AWS::Partition}:logs:*:*:*"
               - Effect: Allow
                 Action:
                   - cloudformation:DescribeStacks
@@ -735,17 +737,17 @@ Resources:
                 Action:
                   - s3:*
                 Resource:
-                  - !Sub 'arn:aws-cn:s3:::${OutputBucket}'
-                  - !Sub 'arn:aws-cn:s3:::${OutputBucket}/*'
-                  - !If [ GreaterThan39, !Sub 'arn:aws-cn:s3:::${RegistryBucket}', !Ref "AWS::NoValue" ]
-                  - !If [ GreaterThan39, !Sub 'arn:aws-cn:s3:::${RegistryBucket}/*', !Ref "AWS::NoValue" ]
+                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${OutputBucket}/*"
+                  - !If [ GreaterThan39, !Sub "arn:${AWS::Partition}:s3:::${RegistryBucket}", !Ref "AWS::NoValue" ]
+                  - !If [ GreaterThan39, !Sub "arn:${AWS::Partition}:s3:::${RegistryBucket}/*", !Ref "AWS::NoValue" ]
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - arn:aws-cn:logs:*:*:*
+                  - !Sub "arn:${AWS::Partition}:logs:*:*:*"
   OpenShiftScalingCWEventRole:
     Type: AWS::IAM::Role
     Properties:
@@ -766,8 +768,8 @@ Resources:
               - Action: ssm:SendCommand
                 Effect: Allow
                 Resource:
-                  - !Sub 'arn:aws-cn:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AnsibleConfigServer}'
-                  - !Sub 'arn:aws-cn:ssm:${AWS::Region}::document/AWS-RunShellScript'
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AnsibleConfigServer}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
   CopyZipsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -779,7 +781,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       Path: /
       Policies:
         - PolicyName: lambda-copier
@@ -790,13 +792,13 @@ Resources:
                 Action:
                   - s3:GetObject
                 Resource:
-                  - !Sub 'arn:aws-cn:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*'
+                  - !Sub "arn:${AWS::Partition}:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*"
               - Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws-cn:s3:::${LambdaZipsBucket}/${QSS3KeyPrefix}*'
+                  - !Sub "arn:${AWS::Partition}:s3:::${LambdaZipsBucket}/${QSS3KeyPrefix}*"
   CopyZipsFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -978,11 +980,11 @@ Resources:
             Statement:
               - Sid: "SsmForSecretBindings"
                 Action: "ssm:PutParameter"
-                Resource: !Sub "arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/asb-*"
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/asb-*"
                 Effect: "Allow"
               - Sid: "AllowCfnToGetTemplates"
                 Action: "s3:GetObject"
-                Resource: "arn:aws-cn:s3:::awsservicebroker/templates/*"
+                Resource: !Sub "arn:${AWS::Partition}:s3:::awsservicebroker/templates/*"
                 Effect: "Allow"
               - Sid: "CloudFormation"
                 Action:
@@ -991,7 +993,7 @@ Resources:
                 - "cloudformation:DescribeStacks"
                 - "cloudformation:UpdateStack"
                 - "cloudformation:CancelUpdateStack"
-                Resource: !Sub "arn:aws-cn:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-service-broker-*/*"
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-service-broker-*/*"
                 Effect: "Allow"
               - Sid: "ServiceClassPermissions"
                 Action:
@@ -1021,13 +1023,13 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-                - ec2.amazonaws.com.cn
+                - !Sub "ec2.${AWS::URLSuffix}"
             Action:
               - sts:AssumeRole
       Path: /
       ManagedPolicyArns:
-        - arn:aws-cn:iam::aws:policy/service-role/AmazonEC2RoleforSSM
-        - arn:aws-cn:iam::aws:policy/AWSCloudFormationReadOnlyAccess
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AWSCloudFormationReadOnlyAccess"
       Policies:
         - PolicyName: aws-quick-start-s3-policy
           PolicyDocument:
@@ -1035,7 +1037,7 @@ Resources:
             Statement:
               - Action:
                   - s3:GetObject
-                Resource: !Sub 'arn:aws-cn:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*'
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*"
                 Effect: Allow
         - PolicyName: WorkloadSetup
           PolicyDocument:
@@ -1052,13 +1054,13 @@ Resources:
             PolicyDocument:
               Statement:
                 - Action: [ "s3:GetObject", "s3:ListBucket" ]
-                  Resource: [ "arn:aws-cn:s3:::awsservicebroker/templates/*", "arn:aws-cn:s3:::awsservicebroker" ]
+                  Resource: [ !Sub "arn:${AWS::Partition}:s3:::awsservicebroker/templates/*", !Sub "arn:${AWS::Partition}:s3:::awsservicebroker" ]
                   Effect: "Allow"
                 - Action: [ "dynamodb:PutItem", "dynamodb:GetItem" ]
                   Resource: !GetAtt ServiceBrokerTable.Arn
                   Effect: "Allow"
                 - Action: [ "ssm:GetParameter", "ssm:GetParameters" ]
-                  Resource: !Sub "arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/asb-*"
+                  Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/asb-*"
                   Effect: "Allow"
           - !Ref AWS::NoValue
         - PolicyName: K8s-AWSCloudProvider-requirements
@@ -1217,7 +1219,7 @@ Resources:
                   - s3:GetObjectTagging
                   - s3:GetObjectVersion
                   - s3:DeleteObject
-                Resource: arn:aws-cn:s3:::*
+                Resource: !Sub "arn:${AWS::Partition}:s3:::*"
               - Action:
                   - sts:GetCallerIdentity
                 Effect: Allow
@@ -1234,7 +1236,7 @@ Resources:
                   - 'logs:PutLogEvents'
                   - 'logs:DescribeLogStreams'
                 Resource:
-                  - 'arn:aws-cn:logs:*:*:*'
+                  - !Sub "arn:${AWS::Partition}:logs:*:*:*"
               - Effect: Allow
                 Action:
                   - 'cloudwatch:PutMetricData'
@@ -1448,9 +1450,9 @@ Resources:
         Fn::Sub:
           - |
             #!/bin/bash -x
-            QSLOCATION=https://${QSS3BucketName}.${S3Region}.amazonaws.com.cn/${QSS3KeyPrefix}
+            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}
             yum install -y git
-            git clone https://github.com/aws-quickstart/quickstart-linux-utilities.git
+            curl ${!QSLOCATION}scripts/quickstart-linux-utilities.tar.gz | tar xvz
             export P=/quickstart-linux-utilities/quickstart-cfn-tools.source
             source $P
             qs_bootstrap_pip || qs_err " pip bootstrap failed "
@@ -1470,7 +1472,7 @@ Resources:
             ./bootstrap.sh || qs_err " bootstrapping failed, see logs for details "
             cfn-signal -e $(qs_status) --stack ${AWS::StackName} --resource OpenShiftGlusterASG --region ${AWS::Region}
           -
-            S3Region: !If [ ChinaCondition, s3.cn-northwest-1, s3 ]
+            S3Region: !If [ GovCloudCondition, s3-us-gov-west-1, !Sub "s3.${AWS::Region}" ]
   OpenShiftEtcdLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Metadata:
@@ -1524,9 +1526,9 @@ Resources:
         Fn::Sub:
           - |
             #!/bin/bash -x
-            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.amazonaws.com.cn/${QSS3KeyPrefix}
+            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}
             yum install -y git
-            git clone https://github.com/aws-quickstart/quickstart-linux-utilities.git
+            curl ${!QSLOCATION}scripts/quickstart-linux-utilities.tar.gz | tar xvz
             export P=/quickstart-linux-utilities/quickstart-cfn-tools.source
             source $P
             qs_bootstrap_pip || qs_err " pip bootstrap failed "
@@ -1546,7 +1548,7 @@ Resources:
             ./bootstrap.sh || qs_err " bootstrapping failed, see logs for details "
             cfn-signal -e $(qs_status) --stack ${AWS::StackName} --resource OpenShiftEtcdASG --region ${AWS::Region}
           -
-            S3Region: !If [ ChinaCondition, s3.cn-northwest-1, s3 ]
+            S3Region: !If [ GovCloudCondition, s3-us-gov-west-1, !Sub "s3.${AWS::Region}" ]
   OpenShiftNodesLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Metadata:
@@ -1607,9 +1609,9 @@ Resources:
         Fn::Sub:
           - |
             #!/bin/bash -x
-            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.amazonaws.com.cn/${QSS3KeyPrefix}
+            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}
             yum install -y git
-            git clone https://github.com/aws-quickstart/quickstart-linux-utilities.git
+            curl ${!QSLOCATION}scripts/quickstart-linux-utilities.tar.gz | tar xvz
             export P=/quickstart-linux-utilities/quickstart-cfn-tools.source
             source $P
             qs_bootstrap_pip || qs_err " pip bootstrap failed "
@@ -1629,7 +1631,7 @@ Resources:
             ./bootstrap.sh || qs_err " bootstrapping failed, see logs for details "
             cfn-signal -e $(qs_status) --stack ${AWS::StackName} --resource OpenShiftNodeASG --region ${AWS::Region}
           -
-            S3Region: !If [ ChinaCondition, s3.cn-northwest-1, s3 ]
+            S3Region: !If [ GovCloudCondition, s3-us-gov-west-1, !Sub "s3.${AWS::Region}" ]
   OpenShiftMasterASLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Metadata:
@@ -1690,9 +1692,9 @@ Resources:
         Fn::Sub:
           - |
             #!/bin/bash -x
-            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.amazonaws.com.cn/${QSS3KeyPrefix}
+            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}
             yum install -y git
-            git clone https://github.com/aws-quickstart/quickstart-linux-utilities.git
+            curl ${!QSLOCATION}scripts/quickstart-linux-utilities.tar.gz | tar xvz
             export P=/quickstart-linux-utilities/quickstart-cfn-tools.source
             source $P
             qs_bootstrap_pip || qs_err " pip bootstrap failed "
@@ -1714,7 +1716,7 @@ Resources:
             echo "$(curl http://169.254.169.254/latest/meta-data/local-ipv4) ${OpenShiftMasterInternalELB.DNSName}" >> /etc/hosts
             cfn-signal -e $(qs_status) --stack ${AWS::StackName} --resource OpenShiftMasterASG --region ${AWS::Region}
           -
-            S3Region: !If [ ChinaCondition, s3.cn-northwest-1, s3 ]
+            S3Region: !If [ GovCloudCondition, s3-us-gov-west-1, !Sub "s3.${AWS::Region}" ]
   CleanupPVRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1726,7 +1728,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       Path: /
       Policies:
         - PolicyName: lambda-cleanuppv
@@ -1774,7 +1776,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       Path: /
       Policies:
         - PolicyName: lambda-acm
@@ -1799,8 +1801,8 @@ Resources:
                 Resource:
                   - !If
                     - SetupSubdomain
-                    - !Sub 'arn:aws-cn:route53:::hostedzone/${Route53HostedSubdomainZone}'
-                    - !Sub 'arn:aws-cn:route53:::hostedzone/${HostedZoneID}'
+                    - !Sub "arn:${AWS::Partition}:route53:::hostedzone/${Route53HostedSubdomainZone}"
+                    - !Sub "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneID}"
               - Effect: Allow
                 Action:
                   - logs:FilterLogEvents
@@ -2078,7 +2080,7 @@ Resources:
         Fn::Sub:
           - |
             #!/bin/bash -x
-            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.amazonaws.com.cn/${QSS3KeyPrefix}
+            export QSLOCATION=https://${QSS3BucketName}.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}
             export ENABLE_HAWKULAR=${HawkEnable}
             export GET_ANSIBLE_FROM_GIT=${AnsibleFromGit}
             export OCP_ANSIBLE_RELEASE=${OsbRelease}
@@ -2087,6 +2089,7 @@ Resources:
             export OPENSHIFTMASTERINTERNALELB=${OpenShiftMasterInternalELB}
             export OPENSHIFTMASTERINTERNALTGARN=${OpenShiftMasterInternalELBTargetGroup}
             export AWS_REGION=${AWS::Region}
+            export S3_ENDPOINT=https://${S3Region}.${AWS::URLSuffix}/
             export CONTAINERACCESSELB=${ContainerAccessELB}
             export OCP_VERSION=${OpenshiftContainerPlatformVersion}
             export RH_USER=${RedhatSubscriptionUserName}
@@ -2106,7 +2109,7 @@ Resources:
             export SB_VERSION=v1.0.0-beta.2
             export SB_ACCOUNTID=${AWS::AccountId}
             yum install -y git
-            git clone https://github.com/aws-quickstart/quickstart-linux-utilities.git
+            curl ${!QSLOCATION}scripts/quickstart-linux-utilities.tar.gz | tar xvz
             export P=/quickstart-linux-utilities/quickstart-cfn-tools.source
             source $P
             qs_bootstrap_pip || qs_err " pip bootstrap failed "
@@ -2118,7 +2121,7 @@ Resources:
             ./bootstrap.sh || qs_err " Openshift installation failed, see logs for details "
             cfn-signal -e $(qs_status) --stack ${AWS::StackName} --resource AnsibleConfigServer --region ${AWS::Region}
           -
-            S3Region: !If [ ChinaCondition, s3.cn-northwest-1, s3 ]
+            S3Region: !If [ GovCloudCondition, s3-us-gov-west-1, !Sub "s3.${AWS::Region}" ]
             HawkEnable: !If [ EnableHawkular, "True", "False" ]
             OsbRelease: !FindInMap [ OpenshiftVersionMap, !Ref 'OpenshiftContainerPlatformVersion', AnsiblePlaybookGitRepoTag ]
             LbHostname: !If [ UseCustomDomain, !If [ UseSubdomain, !Sub "${SubDomainPrefix}.${DomainName}", !Ref "DomainName" ], !GetAtt OpenShiftMasterELB.DNSName ]
@@ -2148,7 +2151,7 @@ Resources:
             - !Ref 'OpenShiftNodeASG'
       Targets:
         - Id: OSEScalingSSMTarget1
-          Arn: !Sub 'arn:aws-cn:ssm:${AWS::Region}::document/AWS-RunShellScript'
+          Arn: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
           Input: !Sub '{"commands":["/bin/aws-ose-qs-scale --scale-in-progress --debug --ocp-version=${OpenshiftContainerPlatformVersion}"],"workingDirectory":["/"],"executionTimeout":["3600"]}'
           RoleArn: !GetAtt 'OpenShiftScalingCWEventRole.Arn'
           RunCommandParameters:

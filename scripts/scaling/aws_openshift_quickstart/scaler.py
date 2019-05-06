@@ -110,7 +110,8 @@ def generate_inital_inventory_nodes(write_hosts_to_temp=False, version='3.9'):
 
     # Masters/glusterfs as nodes for the purposes of software installation.
     _children['nodes']['hosts'].update(_children['masters']['hosts'])
-    _children['nodes']['hosts'].update(_children['glusterfs']['hosts'])
+    if 'glusterfs' in _children.keys():
+        _children['nodes']['hosts'].update(_children['glusterfs']['hosts'])
 
     # Pushing the children and vars into the skeleton
     _initial_ansible_skel['OSEv3']['children'].update(_children)
@@ -296,7 +297,7 @@ def scale_inventory_groups(ocp_version='3.7'):
     for category in InventoryConfig.inventory_node_skel.keys():
         if category is 'provision':
             continue
-        if category is 'etcd':
+        if category in ['etcd', 'glusterfs']:
             _is_cat_name = category
         else:
             _is_cat_name = "{}{}".format(category, 's')
