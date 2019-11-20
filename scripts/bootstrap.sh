@@ -9,9 +9,18 @@ fi
 
 qs_enable_epel &> /var/log/userdata.qs_enable_epel.log || true
 
-qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/redhat_ose-register-${OCP_VERSION}.sh ~/redhat_ose-register.sh
-chmod 755 ~/redhat_ose-register.sh
-qs_retry_command 25 ~/redhat_ose-register.sh ${RH_USER} ${RH_PASS} ${RH_POOLID}
+if [ -z ${LOCAL_REPO_HOST_IP} ]; then 
+  qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/redhat_ose-register-${OCP_VERSION}.sh ~/redhat_ose-register.sh
+  chmod 755 ~/redhat_ose-register.sh
+  qs_retry_command 25 ~/redhat_ose-register.sh ${RH_USER} ${RH_PASS} ${RH_POOLID}
+else 
+  qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/yum.repos.d/ose.repo /etc/yum.repos.d/ose.repo
+  sed -ie "s/<server_IP>/${LOCAL_REPO_HOST_IP}/g" /etc/yum.repos.d/ose.repo
+  rm /etc/yum.repos.d/ose.repoe
+  curl -o /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+  rm -fr /var/cache/yum/*
+  yum clean all
+fi
 
 mkdir -p /etc/aws/
 printf "[Global]\nZone = $(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n" > /etc/aws/aws.conf
@@ -49,7 +58,7 @@ systemctl restart NetworkManager
 systemctl restart systemd-logind
 
 cd /tmp
-qs_retry_command 10 wget https://s3-us-west-1.amazonaws.com/amazon-ssm-us-west-1/latest/linux_amd64/amazon-ssm-agent.rpm
+qs_retry_command 10 wget https://aws-quickstart-cn.s3.cn-northwest-1.amazonaws.com.cn/aws-ssm-agent/amazon-ssm-agent.rpm
 qs_retry_command 10 yum install -y ./amazon-ssm-agent.rpm
 systemctl start amazon-ssm-agent
 systemctl enable amazon-ssm-agent

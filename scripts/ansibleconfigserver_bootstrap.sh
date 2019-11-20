@@ -9,16 +9,25 @@ fi
 
 qs_enable_epel &> /var/log/userdata.qs_enable_epel.log
 
-qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/redhat_ose-register-${OCP_VERSION}.sh ~/redhat_ose-register.sh
-chmod 755 ~/redhat_ose-register.sh
-qs_retry_command 20 ~/redhat_ose-register.sh ${RH_USER} ${RH_PASS} ${RH_POOLID}
+if [ -z ${LOCAL_REPO_HOST_IP} ]; then 
+  qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/redhat_ose-register-${OCP_VERSION}.sh ~/redhat_ose-register.sh
+  chmod 755 ~/redhat_ose-register.sh
+  qs_retry_command 25 ~/redhat_ose-register.sh ${RH_USER} ${RH_PASS} ${RH_POOLID}
+else 
+  qs_retry_command 25 aws s3 cp ${QS_S3URI}scripts/yum.repos.d/ose.repo /etc/yum.repos.d/ose.repo
+  sed -ie "s/<server_IP>/${LOCAL_REPO_HOST_IP}/g" /etc/yum.repos.d/ose.repo
+  rm /etc/yum.repos.d/ose.repoe
+  curl -o /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+  rm -fr /var/cache/yum/*
+  yum clean all
+fi
 
 qs_retry_command 10 yum -y install ansible-2.4.6.0 yum-versionlock
 sed -i 's/#host_key_checking = False/host_key_checking = False/g' /etc/ansible/ansible.cfg
 yum versionlock add ansible
-yum repolist -v | grep OpenShift
+yum repolist -v | grep 'OpenShift\|ose'
 
-qs_retry_command 10 pip install boto3 &> /var/log/userdata.boto3_install.log
+qs_retry_command 10 pip install boto3 -i https://pypi.douban.com/simple &> /var/log/userdata.boto3_install.log
 mkdir -p /root/ose_scaling/aws_openshift_quickstart
 mkdir -p /root/ose_scaling/bin
 qs_retry_command 10 aws s3 cp ${QS_S3URI}scripts/scaling/aws_openshift_quickstart/__init__.py /root/ose_scaling/aws_openshift_quickstart/__init__.py
@@ -37,21 +46,41 @@ pip install /root/ose_scaling
 qs_retry_command 10 cfn-init -v --stack ${AWS_STACKNAME} --resource AnsibleConfigServer --configsets cfg_node_keys --region ${AWS_REGION}
 
 echo openshift_master_cluster_hostname=${INTERNAL_MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
-echo openshift_master_cluster_public_hostname=${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
+echo openshift_master_cluster_public_hostname=${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+
+# if [ -z ${BASE_DOMAIN_NAME} ]; then 
+#     echo openshift_master_cluster_public_hostname=${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+# else 
+#     echo openshift_master_cluster_public_hostname=${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
+# fi
 
 # disable docker image availability check. workaround for the hardcoded 10 seconds time out
 echo 'openshift_disable_check="docker_image_availability"' >> /tmp/openshift_inventory_userdata_vars
 
-if [ "$(echo ${MASTER_ELBDNSNAME} | grep -c '\.elb\.amazonaws\.com')" == "0" ] ; then
-    echo openshift_master_default_subdomain=${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
-fi
+echo openshift_master_default_subdomain=${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+
+# if [ -z ${BASE_DOMAIN_NAME} ]; then 
+#     echo openshift_master_default_subdomain=${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+# else
+#     if [ "$(echo ${MASTER_ELBDNSNAME} | grep -c '\.elb\.${AWS_REGION}\.amazonaws\.com\.cn')" == "0" ] ; then
+#         echo openshift_master_default_subdomain=${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+#     fi
+# fi
 
 if [ "${ENABLE_HAWKULAR}" == "True" ] ; then
-    if [ "$(echo ${MASTER_ELBDNSNAME} | grep -c '\.elb\.amazonaws\.com')" == "0" ] ; then
-        echo openshift_metrics_hawkular_hostname=metrics.${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
-    else
-        echo openshift_metrics_hawkular_hostname=metrics.router.default.svc.cluster.local >> /tmp/openshift_inventory_userdata_vars
-    fi
+
+    echo openshift_metrics_hawkular_hostname=metrics.${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+
+    # if [ -z ${BASE_DOMAIN_NAME} ]; then
+    #     echo openshift_metrics_hawkular_hostname=metrics.${BASE_DOMAIN_NAME} >> /tmp/openshift_inventory_userdata_vars
+    # else 
+    #     if [ "$(echo ${MASTER_ELBDNSNAME} | grep -c '\.elb\.${AWS_REGION}\.amazonaws\.com\.cn')" == "0" ] ; then
+    #         echo openshift_metrics_hawkular_hostname=metrics.${MASTER_ELBDNSNAME} >> /tmp/openshift_inventory_userdata_vars
+    #     else
+    #         echo openshift_metrics_hawkular_hostname=metrics.router.default.svc.cluster.local >> /tmp/openshift_inventory_userdata_vars
+    #     fi
+    # fi
+
     echo openshift_metrics_install_metrics=true >> /tmp/openshift_inventory_userdata_vars
     echo openshift_metrics_start_cluster=true >> /tmp/openshift_inventory_userdata_vars
     echo openshift_metrics_cassandra_storage_type=dynamic >> /tmp/openshift_inventory_userdata_vars
@@ -70,18 +99,20 @@ fi
 echo openshift_master_api_port=443 >> /tmp/openshift_inventory_userdata_vars
 echo openshift_master_console_port=443 >> /tmp/openshift_inventory_userdata_vars
 
+echo openshift_docker_options=' --selinux-enabled --log-opt max-size=1M --log-opt max-file=3 --log-driver=json-file --insecure-registry 172.30.0.0/16 --signature-verification=false --registry-mirror=https://dockerhub.awsguru.cc' >> /tmp/openshift_inventory_userdata_vars
+
 qs_retry_command 10 yum -y install wget git net-tools bind-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct
 # Workaround this not-a-bug https://bugzilla.redhat.com/show_bug.cgi?id=1187057
 pip uninstall -y urllib3
 qs_retry_command 10 yum -y update
-qs_retry_command 10 pip install urllib3
+qs_retry_command 10 pip install urllib3 -i https://pypi.douban.com/simple
 if [ "${OCP_VERSION}" == "3.9" ] ; then
     qs_retry_command 10 yum -y install atomic-openshift-utils
 fi
 qs_retry_command 10 yum -y install atomic-openshift-excluder atomic-openshift-docker-excluder
 
 cd /tmp
-qs_retry_command 10 wget https://s3-us-west-1.amazonaws.com/amazon-ssm-us-west-1/latest/linux_amd64/amazon-ssm-agent.rpm
+qs_retry_command 10 wget https://aws-quickstart-cn.s3.cn-northwest-1.amazonaws.com.cn/aws-ssm-agent/amazon-ssm-agent.rpm
 qs_retry_command 10 yum install -y ./amazon-ssm-agent.rpm
 systemctl start amazon-ssm-agent
 systemctl enable amazon-ssm-agent
@@ -143,15 +174,18 @@ scp $AWSSB_SETUP_HOST:~/.kube/config ~/.kube/config
 if [ "${ENABLE_AWSSB}" == "Enabled" ]; then
     mkdir -p ~/aws_broker_install
     cd ~/aws_broker_install
-    qs_retry_command 10 wget https://raw.githubusercontent.com/awslabs/aws-servicebroker/release-${SB_VERSION}/packaging/openshift/deploy.sh
-    qs_retry_command 10 wget https://raw.githubusercontent.com/awslabs/aws-servicebroker/release-${SB_VERSION}/packaging/openshift/aws-servicebroker.yaml
-    qs_retry_command 10 wget https://raw.githubusercontent.com/awslabs/aws-servicebroker/release-${SB_VERSION}/packaging/openshift/parameters.env
+    qs_retry_command 10 wget https://awsservicebroker.s3.cn-northwest-1.amazonaws.com.cn/scripts/release-${SB_VERSION}/packaging/openshift/deploy.sh
+    qs_retry_command 10 wget https://awsservicebroker.s3.cn-northwest-1.amazonaws.com.cn/scripts/release-${SB_VERSION}/packaging/openshift/aws-servicebroker.yaml
+    qs_retry_command 10 wget https://awsservicebroker.s3.cn-northwest-1.amazonaws.com.cn/scripts/release-${SB_VERSION}/packaging/openshift/parameters.env
     chmod +x deploy.sh
     sed -i "s/TABLENAME=awssb/TABLENAME=${SB_TABLE}/" parameters.env
     sed -i "s/TARGETACCOUNTID=/TARGETACCOUNTID=${SB_ACCOUNTID}/" parameters.env
     sed -i "s/TARGETROLENAME=/TARGETROLENAME=${SB_ROLE}/" parameters.env
     sed -i "s/VPCID=/VPCID=${VPCID}/" parameters.env
     sed -i "s/^REGION=us-east-1$/REGION=${AWS_REGION}/" parameters.env
+    sed -i "s/^S3REGION=us-east-1$/S3REGION=${AWS_REGION}/" parameters.env
+    sed -i "s/^IMAGE=awsservicebroker\/aws-servicebroker:beta$/IMAGE=awsguru\/aws-servicebroker:beta/" parameters.env
+    sed -i "s/^S3KEY=templates\/latest$/S3KEY=templates\/1.0.0-beta/" parameters.env
     export KUBECONFIG=/root/.kube/config
     ./deploy.sh
     cd ../
